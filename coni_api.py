@@ -5,9 +5,22 @@ import pickle, requests
 import json
 import re
 
+def extract_json_objects(text, decoder=json.JSONDecoder()):
+        pos = 0
+        while True:
+            match = text.find('{', pos)
+            if match == -1:
+                break
+            try:
+                result, index = decoder.raw_decode(text[match:])
+                yield result
+                pos = match + index
+            except ValueError:
+                pos = match + 1
+
 class coni_instagram:
 
-    def __init__(self,login=None,password=None,cookies_file=None):
+    def __init__(self,login=None,password=None,cookie_file=None):
 
         # initie une session requests pour la navigation
         self.headers = self.__default_headers()
@@ -25,17 +38,15 @@ class coni_instagram:
         login_attempt_count = str(0)
 
         # Charge le cookie ici
-        if cookies_file != None:
+        if cookie_file != None:
             try:
-                with open(cookies_file, 'rb') as f:
+                with open(cookie_file, 'rb') as f:
                     self.browser_session.cookies.update(pickle.load(f))
                 cookie_loaded = True
-                print("Utilisation du cookie..")
             except FileNotFoundError:
                 pass
 
         if cookie_loaded is False:
-            print("Utilisation des logins..")
             if login == None or password == None:    
                 raise Exception("Wrong login/password or cookie file")
             else:
@@ -57,7 +68,7 @@ class coni_instagram:
                 if login_reponse != 200:
                     raise Exception("Impossible to login")       
                 else:
-                    self.save_session(filename="bot_coni.cookie")
+                    self.save_session(filename=login)
         
         if self._csrftoken == None:
             self._csrftoken = self.browser_session.cookies.get_dict()["csrftoken"]
@@ -178,13 +189,11 @@ class coni_instagram:
                     post = ""
         return posts
 
-    def jsoned(self,text):
-        return json.loads(text)
 
     def get_query_hash(self,text):
         return re.search(r'byTagName.get\([a-zA-Z][)]{1,2}.pagination},queryId:"[a-zA-Z0-9]{32}"',text).group().split('"')[1]
 
-    def get_every_post(self,username):
+    def get_every_post(self, username, layer=-1):
 
         posts = []
         requete = self.make_get("https://www.instagram.com/" + username)
@@ -192,19 +201,25 @@ class coni_instagram:
         for i in self.get_json_post(requete.text):
             posts.append(i)
 
-        user_information_requete = self.make_get("https://www.instagram.com/"+username+"/?__a=1")
+        user_information_requete = self.make_get("https://www.instagram.com/%s/?__a=1" % username)
         user_informations = json.loads(user_information_requete.text)
 
         loop_post = int(user_informations["graphql"]["user"]["edge_owner_to_timeline_media"]["count"] / 12)
         user_id = user_informations["graphql"]["user"]["id"]
         end_cursor = user_informations["graphql"]["user"]["edge_owner_to_timeline_media"]["page_info"]["end_cursor"]
 
+        if layer > loop_post or layer == -1:
+            layer = loop_post
+        else:
+            loop_post = layer
+
         for i in range(loop_post):
+            print("wth")
             next_post_url = "https://www.instagram.com/graphql/query/?query_hash="+self.query_hash+"&variables="+"{\"id\":\""+user_id+"\",\"first\":12,\"after\":\""+end_cursor+"\"}"
             next_post = self.make_get(next_post_url,headers=self.headers)
 
-            for i in self.get_json_post(next_post.text):
-                posts.append(i)
+            for j in self.get_json_post(next_post.text):
+                posts.append(j)
 
             post_information  = json.loads(next_post.text)
             try:
@@ -212,6 +227,8 @@ class coni_instagram:
             except:
                 print("ERREUR:",i)
                 pass
+            
+            
 
         return posts
 
@@ -231,14 +248,50 @@ class coni_instagram:
         data_like = urllib.parse.urlencode(post_params).encode('ascii')
 
         req = self.make_post(url=url,data=data_like)
-        print(req)
-        return True
+        return req
 
     def is_private(self,username):
         requete = self.make_get("https://www.instagram.com/" + username + "/?__a=1")
         user_infomations = json.loads(requete.text)
         return user_infomations["graphql"]["user"]["is_private"]
 
+    def user_info(self, username):
+        requete = self.make_get("https://www.instagram.com/" + username + "/?__a=1")
+        user_infomations = json.loads(requete.text)
+        return user_infomations
+
+    def post_info(self, shortcode):
+        requete = self.make_get("https://www.instagram.com/p/%s" % shortcode)
+        for i in extract_json_objects(requete.text):
+            if "config" in i:
+                return i
+
+    def is_post_liked(self, shortcode=False, json_=False):
+        if shortcode:
+            json_ = self.post_info(shortcode)
+        elif json_:
+            json_ = json_
+        else:
+            return 1
+        
+        return json_["entry_data"]["PostPage"][0]["graphql"]["shortcode_media"]["viewer_has_liked"]
+
+    def get_posts_media_link(self, post):
+        
+        if "edge_sidecar_to_children" in post:
+            url = []
+            for photo in post["edge_sidecar_to_children"]["edges"]:
+                if photo["node"]["__typename"] == 'GraphVideo':
+                    url.append(photo["node"]["video_url"])
+                else:
+                    url.append(photo["node"]["display_url"])
+        else:
+            if post["__typename"] == 'GraphVideo':
+                url = post["video_url"]
+            else:
+                url = post["display_url"]
+        
+        return url
 
 # Sauvegarder les cookies ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     def save_session(self,filename=None, session=None):
@@ -250,5 +303,8 @@ class coni_instagram:
 
 
 
-coni_api = coni_instagram(login="bot_coni",password="mot_de_passe",cookies_file="bot_coni.cookie")
-posts = coni_api.get_every_post("bot_coni")
+# coni_api = coni_instagram(login="bot_coni",password="Solrot1911",cookie_file="bot_coni.cookie")
+# posts = coni_api.get_every_post("ni.coni.coni")
+# print()
+# for post in posts:
+#     coni_api.like_post(str(post["id"]))
