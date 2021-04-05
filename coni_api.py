@@ -20,7 +20,7 @@ def extract_json_objects(text, decoder=json.JSONDecoder()):
 
 class coni_instagram:
 
-    def __init__(self,login=None,password=None,cookie_file=None):
+    def __init__(self,login=None,password=None,cookies_file=None):
 
         # initie une session requests pour la navigation
         self.headers = self.__default_headers()
@@ -38,9 +38,9 @@ class coni_instagram:
         login_attempt_count = str(0)
 
         # Charge le cookie ici
-        if cookie_file != None:
+        if cookies_file != None:
             try:
-                with open(cookie_file, 'rb') as f:
+                with open(cookies_file, 'rb') as f:
                     self.browser_session.cookies.update(pickle.load(f))
                 cookie_loaded = True
             except FileNotFoundError:
@@ -189,6 +189,8 @@ class coni_instagram:
                     post = ""
         return posts
 
+    def jsoned(self,text):
+        return json.loads(text)
 
     def get_query_hash(self,text):
         return re.search(r'byTagName.get\([a-zA-Z][)]{1,2}.pagination},queryId:"[a-zA-Z0-9]{32}"',text).group().split('"')[1]
@@ -303,7 +305,7 @@ class coni_instagram:
 
 
 
-# coni_api = coni_instagram(login="bot_coni",password="Solrot1911",cookie_file="bot_coni.cookie")
+# coni_api = coni_instagram(login="bot_coni",password="Solrot1911",cookies_file="bot_coni.cookie")
 # posts = coni_api.get_every_post("ni.coni.coni")
 # print()
 # for post in posts:
